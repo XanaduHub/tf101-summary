@@ -274,3 +274,183 @@ tags = {
 **Step 8:-** **Application Load Balancer** 생성
 
 -  `alb.tf` 
+- external Load balancer type으로 생
+- 로드 밸런서 유형은 ALB
+- aws_lb_target_group_attachment 리소스는 인스턴스를 대상 그룹에 연결합니다.
+- 80 포트에서 요청 요청 수신
+
+```
+# Creating External LoadBalancer
+resource "aws_lb" "external-alb" {
+  name               = "External LB"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.demosg.id]
+  subnets            = [aws_subnet.public-subnet-1.id, aws_subnet.public-subnet-1.id]
+}
+resource "aws_lb_target_group" "target-elb" {
+  name     = "ALB TG"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.demovpc.id
+}
+resource "aws_lb_target_group_attachment" "attachment" {
+  target_group_arn = aws_lb_target_group.external-alb.arn
+  target_id        = aws_instance.demoinstance.id
+  port             = 80
+depends_on = [
+    aws_instance.demoinstance,
+  ]
+}
+resource "aws_lb_target_group_attachment" "attachment" {
+  target_group_arn = aws_lb_target_group.external-alb.arn
+  target_id        = aws_instance.demoinstance1.id
+  port             = 80
+depends_on = [
+    aws_instance.demoinstance1,
+  ]
+}
+resource "aws_lb_listener" "external-elb" {
+  load_balancer_arn = aws_lb.external-alb.arn
+  port              = "80"
+  protocol          = "HTTP"
+default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.external-alb.arn
+  }
+}
+```
+
+
+
+**Step 9:-** **RDS instance** 생성
+
+- `rds.tf` 
+- 다음 코드에서 username 및 password을 변경해야 합니다.
+- multi-az는 고가용성을 위해 true로 설정됩니다.
+
+```
+# Creating RDS Instance
+resource "aws_db_subnet_group" "default" {
+  name       = "main"
+  subnet_ids = [aws_subnet.database-subnet-1.id, aws_subnet.database-subnet-1.id]
+tags = {
+    Name = "My DB subnet group"
+  }
+}
+resource "aws_db_instance" "default" {
+  allocated_storage      = 10
+  db_subnet_group_name   = aws_db_subnet_group.default.id
+  engine                 = "mysql"
+  engine_version         = "8.0.20"
+  instance_class         = "db.t2.micro"
+  multi_az               = true
+  name                   = "mydb"
+  username               = "username"
+  password               = "password"
+  skip_final_snapshot    = true
+  vpc_security_group_ids = [aws_security_group.database-sg.id]
+}
+```
+
+
+
+**Step 10:-** **outputs**
+
+- `outputs.tf` 
+- ALB의 DNS를 가져옵니다.
+
+```
+# Getting the DNS of load balancer
+output "lb_dns_name" {
+  description = "The DNS name of the load balancer"
+  value       = "${aws_lb.external-alb.dns_name}"
+}
+```
+
+
+
+**Step 11:-** **variable**
+
+- `vars.tf` 
+
+```
+# Defining CIDR Block for VPC
+variable "vpc_cidr" {
+  default = "10.0.0.0/16"
+}
+# Defining CIDR Block for 1st Subnet
+variable "subnet_cidr" {
+  default = "10.0.1.0/24"
+}
+# Defining CIDR Block for 2nd Subnet
+variable "subnet1_cidr" {
+  default = "10.0.2.0/24"
+}
+# Defining CIDR Block for 3rd Subnet
+variable "subnet2_cidr" {
+  default = "10.0.3.0/24"
+}
+# Defining CIDR Block for 3rd Subnet
+variable "subnet2_cidr" {
+  default = "10.0.4.0/24"
+}
+# Defining CIDR Block for 3rd Subnet
+variable "subnet2_cidr" {
+  default = "10.0.5.0/24"
+}
+# Defining CIDR Block for 3rd Subnet
+variable "subnet2_cidr" {
+  default = "10.0.6.0/24"
+}
+```
+
+
+
+**Step 12:-**  **user data**
+
+- `data.sh` 
+- 다음 코드는 EC2 인스턴스에 Apache 웹 서버를 설치합니다.
+
+```
+#!/bin/bash
+yum update -y
+yum install -y httpd.x86_64
+systemctl start httpd.service
+systemctl enable httpd.service
+echo "Hello World from $(hostname -f)" > /var/www/html/index.html
+```
+
+
+
+**Step 12:-**  infrastructure 생성
+
+* 다음 명령을 이용하여 인프라 생성
+
+  * terraform init은 작업 디렉토리를 초기화하고 공급자의 플러그인을 다운로드하는 것입니다.
+
+  * terraform 계획은 코드에 대한 실행 계획을 만드는 것입니다.
+
+  * terraform 적용은 실제 인프라를 생성하는 것입니다. 
+    인프라를 생성하기 위해 액세스 키와 비밀 키를 제공하라는 메시지가 표시됩니다. 
+    따라서 Access Key와 Secret Key를 하드코딩하는 것보다 런타임에 적용하는 것이 좋습니다.
+
+
+
+**Step 13:-** 생성된 리소스 확인
+
+* 테라폼은 다음 리소스를 생성합니다
+  1. **VPC**
+  2. **Application Load Balancer**
+  3. **Public & Private Subnets**
+  4. **EC2 Instances**
+  5. **Route Table**
+  6. **Internet Gateway**
+  7. **RDS Instance**
+  8. **Security Groups for Web & RDS instances**
+
+
+
+리소스 생성이 완료되면 로드 밸런서의 DNS를 가져와서 브라우저에 붙여 넣으면 로드 밸런서가 두 인스턴스에 요청을 보내는 것을 볼 수 있습니다.
+
+이상으로 Terraform을 사용하여 AWS에서 다양한 리소스를 생성하는 방법을 실습하였습니다.
